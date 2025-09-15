@@ -50,7 +50,7 @@ def load_llm_and_retriever():
     vector_store = Chroma.from_documents(texts, embeddings, persist_directory="chroma_db")
 
     # 4. Initialize the LLM
-    llm = ChatGoogleGenerativeAI(model="gemini-pro", temperature=0.3, convert_system_message_to_human=True)
+    llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash-lite", temperature=0.3, convert_system_message_to_human=True)
 
     # 5. Create the RetrievalQA chain
     retriever = vector_store.as_retriever(search_kwargs={"k": 5})
