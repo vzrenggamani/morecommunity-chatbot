@@ -6,3 +6,4 @@ chromadb
 unstructured
 markdown
 streamlit
+pysqlite3-binary
