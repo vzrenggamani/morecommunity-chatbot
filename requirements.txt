@@ -3,5 +3,4 @@ langchain-google-genai
 langchain
 chromadb
 unstructured
-unstructured-markdown
 streamlit
