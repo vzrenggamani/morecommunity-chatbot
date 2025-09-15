@@ -1,8 +1,3 @@
----
-title: Komunitas MORE Ajak Solidaritas pada Penyakit Langka
-source_url: https://kanal24.co.id/komunitas-more-ajak-solidaritas-pada-penyakit-langka/
----
-
 # Komunitas MORE Ajak Solidaritas pada Penyakit Langka
 
 Komunitas “Mom of Rare Disease” (MORE) menggelar kegiatan Langka(h) Kecil 2024 bertemakan “A Little Step for a Better World” pada Minggu (3/3/2024) di Trans Studio Mini Transmart MX Mall Malang lantai empat. Kegiatan ini bertujuan untuk memperingati Hari Penyakit Langka Sedunia yang jatuh pada tanggal 29 Februari lalu.
