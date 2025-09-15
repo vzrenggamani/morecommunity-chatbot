@@ -1,61 +1,59 @@
 import streamlit as st
 import os
-from langchain_community.document_loaders import DirectoryLoader, UnstructuredMarkdownLoader
+from langchain_community.document_loaders import UnstructuredMarkdownLoader
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_google_genai import GoogleGenerativeAIEmbeddings, ChatGoogleGenerativeAI
 from langchain_community.vectorstores import Chroma
 from langchain.chains import RetrievalQA
+import glob #<-- Import glob
 
-# --- App Configuration ---
-st.set_page_config(page_title="Chatbot Dukungan Orang Tua", page_icon="❤️")
-st.title("❤️ Chatbot Dukungan untuk Orang Tua Hebat")
-st.write("Dapatkan informasi dari komunitas dan para ahli. Ketik pertanyaan Anda di bawah ini.")
+# ... (keep your streamlit config and API key setup the same) ...
 
-# --- Google API Key Setup ---
-# For Streamlit Cloud, use st.secrets to keep your API key secure
-try:
-    # Local development: Use an environment variable
-    GOOGLE_API_KEY = os.environ.get("GOOGLE_API_KEY")
-    if not GOOGLE_API_KEY:
-        # Deployed on Streamlit Cloud: Use secrets
-        GOOGLE_API_KEY = st.secrets["GOOGLE_API_KEY"]
-    os.environ["GOOGLE_API_KEY"] = GOOGLE_API_KEY
-except (KeyError, TypeError):
-    st.error("Error: GOOGLE_API_KEY not found. Please set it in Streamlit secrets or as an environment variable.")
-    st.stop()
-
-
-# --- Caching Functions to Load Data and Models Only Once ---
 @st.cache_resource
 def load_llm_and_retriever():
     """
-    Loads all necessary components: documents, vector store, and the QA chain.
-    The @st.cache_resource decorator ensures this function only runs once.
+    Loads all necessary components and handles errors gracefully.
     """
-    # 1. Load Documents from the 'data' directory
-    loader = DirectoryLoader('./data/', glob="**/*.md", loader_cls=UnstructuredMarkdownLoader, show_progress=True)
-    documents = loader.load()
+    # 1. Load Documents with improved error handling
+    st.info("Loading documents from the 'data' directory...")
+    all_docs = []
+    # Find all markdown files in the data directory
+    md_files = glob.glob('./data/**/*.md', recursive=True)
+    
+    for file_path in md_files:
+        try:
+            loader = UnstructuredMarkdownLoader(file_path)
+            # .load() returns a list, so we extend our list
+            all_docs.extend(loader.load())
+        except Exception as e:
+            # If a file fails, print a warning and skip it
+            st.warning(f"Could not load file: {file_path}. Error: {e}")
+            continue # Go to the next file
+    
+    if not all_docs:
+        st.error("No documents were loaded. Please check the 'data' folder and file contents.")
+        st.stop()
+        
+    st.success(f"Successfully loaded {len(all_docs)} document(s).")
 
     # 2. Split Documents into Chunks
     text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=100)
-    texts = text_splitter.split_documents(documents)
+    texts = text_splitter.split_documents(all_docs)
 
     # 3. Create Embeddings and Store in ChromaDB
     embeddings = GoogleGenerativeAIEmbeddings(model="models/text-embedding-004")
-    
-    # Persist the vector store in a local directory
     vector_store = Chroma.from_documents(texts, embeddings, persist_directory="chroma_db")
 
     # 4. Initialize the LLM
-    llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash-lite", temperature=0.3, convert_system_message_to_human=True)
+    llm = ChatGoogleGenerativeAI(model="gemini-pro", temperature=0.3, convert_system_message_to_human=True)
 
     # 5. Create the RetrievalQA chain
-    retriever = vector_store.as_retriever(search_kwargs={"k": 5}) # Retrieve top 5 most relevant chunks
+    retriever = vector_store.as_retriever(search_kwargs={"k": 5})
     qa_chain = RetrievalQA.from_chain_type(
         llm=llm,
         chain_type="stuff",
         retriever=retriever,
-        return_source_documents=True # This is useful for showing sources
+        return_source_documents=True
     )
     return qa_chain
 
