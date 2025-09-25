@@ -2,11 +2,12 @@ version: '3.8'
 
 services:
   raredisease-chatbot:
-    build: .
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: raredisease-chatbot
     ports:
       - "8501:8501"
-    env_file:
-      - .env
     environment:
       - GOOGLE_API_KEY=${GOOGLE_API_KEY}
     volumes:
