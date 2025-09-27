@@ -1,0 +1,36 @@
+version: '3.8'
+
+services:
+  raredisease-chatbot:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: raredisease-chatbot-prod
+    ports:
+      - "8501:8501"
+    environment:
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY}
+      - STREAMLIT_SERVER_HEADLESS=true
+      - STREAMLIT_BROWSER_GATHER_USAGE_STATS=false
+    volumes:
+      # Mount data directory to keep documents accessible
+      - ./data:/app/data:ro
+      # Persist ChromaDB data
+      - chroma_data:/app/chroma_db
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8501/_stcore/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    # Production optimizations
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+        reservations:
+          memory: 512M
+
+volumes:
+  chroma_data:
