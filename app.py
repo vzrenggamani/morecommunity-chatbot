@@ -106,7 +106,64 @@ def add_token_usage(input_tokens, output_tokens, query_text, response_text):
     if len(st.session_state.token_usage["session_history"]) > 10:
         st.session_state.token_usage["session_history"] = st.session_state.token_usage["session_history"][-10:]
 
-def format_token_info(input_tokens, output_tokens):
+def format_token_info(input_tokens, output_tokens, context_text, num_retrieved_docs):
+    """Format token usage information for display"""
+    total_tokens = input_tokens + output_tokens
+
+    # Estimate cost (using approximate pricing for Gemini Pro)
+    input_cost = (input_tokens / 1000) * 0.00025  # $0.00025 per 1K input tokens
+    output_cost = (output_tokens / 1000) * 0.0005  # $0.0005 per 1K output tokens
+    total_cost = input_cost + output_cost
+
+    context_tokens = count_tokens(context_text) if context_text else 0
+
+    token_info = f"""
+
+**📊 Token Usage:**
+- Input: {input_tokens:,} tokens
+- Output: {output_tokens:,} tokens
+- Total: {total_tokens:,} tokens
+- Context: {context_tokens:,} tokens (from {num_retrieved_docs} docs)
+- Estimated cost: ${total_cost:.6f}
+
+**📈 Session Stats:**
+- Total conversations: {st.session_state.token_usage['conversation_count']}
+- Total input tokens: {st.session_state.token_usage['total_input_tokens']:,}
+- Total output tokens: {st.session_state.token_usage['total_output_tokens']:,}
+- Session cost: ${(st.session_state.token_usage['total_input_tokens'] * 0.00025 + st.session_state.token_usage['total_output_tokens'] * 0.0005) / 1000:.6f}
+"""
+    return token_info
+
+def get_optimized_context(relevant_docs, max_tokens=500):
+    """Get context text optimized for token usage"""
+    context_parts = []
+    current_tokens = 0
+
+    for i, doc in enumerate(relevant_docs):
+        doc_content = doc.page_content
+        doc_tokens = count_tokens(doc_content)
+
+        # If adding this document would exceed limit, truncate it
+        if current_tokens + doc_tokens > max_tokens:
+            remaining_tokens = max_tokens - current_tokens
+            if remaining_tokens > 50:  # Only add if we have meaningful space left
+                # Truncate the document to fit
+                words = doc_content.split()
+                truncated_content = ""
+                for word in words:
+                    test_content = truncated_content + " " + word if truncated_content else word
+                    if count_tokens(test_content) <= remaining_tokens:
+                        truncated_content = test_content
+                    else:
+                        break
+                if truncated_content:
+                    context_parts.append(truncated_content + "...")
+            break
+        else:
+            context_parts.append(doc_content)
+            current_tokens += doc_tokens
+
+    return "\n\n".join(context_parts), len(context_parts)
     """Format token usage information for display"""
     total_tokens = input_tokens + output_tokens
 
@@ -116,15 +173,18 @@ def format_token_info(input_tokens, output_tokens):
     estimated_cost_output = output_tokens * 0.000002  # $0.002 per 1K tokens (example)
     total_estimated_cost = estimated_cost_input + estimated_cost_output
 
+    context_info = ""
+    if context_size and num_docs:
+        context_tokens = count_tokens(context_size) if isinstance(context_size, str) else context_size
+        context_info = f"\n- Context: {context_tokens:,} tokens ({num_docs} docs)"
+
     return f"""
 📊 **Token Usage:**
-- Input tokens: {input_tokens:,}
+- Input tokens: {input_tokens:,}{context_info}
 - Output tokens: {output_tokens:,}
 - Total tokens: {total_tokens:,}
 - Estimated cost: ${total_estimated_cost:.6f} (approximate)
-"""
-
-@st.cache_resource
+"""@st.cache_resource
 def get_data_directory():
     """Get the correct data directory path for different environments"""
     # Try different possible data directory locations
@@ -296,7 +356,7 @@ def load_llm_and_retriever():
     retriever = vector_store.as_retriever(
         search_type="similarity_score_threshold",
         search_kwargs={
-            "k": 5,
+            "k": 3,  # Reduced from 5 to 3 to save tokens
             "score_threshold": 0.3  # Lower threshold = more lenient matching
         }
     )
@@ -627,6 +687,27 @@ def show_debug_page():
         st.write("- Per-conversation token breakdown")
         st.write("- Token usage trends over time")
 
+    # Token Usage Configuration
+    st.header("⚙️ Token Usage Configuration")
+
+    st.info("💡 **Tip**: Reducing max context tokens will lower input token usage but may reduce answer quality.")
+
+    # Add configuration sliders
+    col1, col2 = st.columns(2)
+
+    with col1:
+        st.subheader("Current Settings")
+        st.write("- **Max Context Tokens**: 400")
+        st.write("- **Retrieved Documents**: 3")
+        st.write("- **Document Chunk Size**: 1000 chars")
+
+    with col2:
+        st.subheader("Token Breakdown")
+        st.write("- **System Prompt**: ~150 tokens")
+        st.write("- **Context**: ~400 tokens (optimized)")
+        st.write("- **User Question**: varies")
+        st.write("- **Total Input**: ~550-600 tokens")
+
     # Actions
     st.header("🛠️ Actions")
 
@@ -830,6 +911,10 @@ def show_chat_page(qa_chain):
             relevant_docs = retriever.get_relevant_documents(prompt)
             context_text = "\n\n".join([doc.page_content for doc in relevant_docs])
 
+            # Debug: Show context statistics
+            context_length = len(context_text)
+            num_retrieved_docs = len(relevant_docs)
+
             # Calculate tokens for the full prompt that will be sent to LLM
             full_prompt_text = f"""
             Anda adalah dokter AI yang ahli dalam bidang penyakit langka dan kesehatan. Anda memiliki akses ke berbagai jenis pengetahuan medis:
@@ -893,7 +978,7 @@ def show_chat_page(qa_chain):
                 source_list += f"- {source_type}: {source_name}\n"
 
             # Add token usage information
-            token_info = format_token_info(input_tokens, output_tokens)
+            token_info = format_token_info(input_tokens, output_tokens, context_text, num_retrieved_docs)
 
             # Create full response with token info
             full_response = answer + source_list + token_info
