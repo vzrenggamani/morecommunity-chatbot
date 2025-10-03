@@ -27,7 +27,7 @@ from datetime import datetime
 from langchain_community.document_loaders import UnstructuredMarkdownLoader
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_google_genai import GoogleGenerativeAIEmbeddings
-from langchain_community.vectorstores import Chroma
+from langchain_chroma import Chroma
 
 def determine_document_type(file_path):
     """Determine document type based on folder structure"""
@@ -42,6 +42,25 @@ def determine_document_type(file_path):
     else:
         return 'general'
 
+def get_data_directory():
+    """Get the correct data directory path for different environments"""
+    # Try different possible data directory locations
+    possible_paths = [
+        './data',           # Local development
+        '/app/data',        # Docker container
+        'data',             # Alternative local
+        os.path.join(os.getcwd(), 'data')  # Absolute path from current working directory
+    ]
+
+    for path in possible_paths:
+        if os.path.exists(path):
+            # Check if it actually contains markdown files
+            md_files = glob.glob(f'{path}/**/*.md', recursive=True)
+            if md_files:
+                return path, md_files
+
+    return None, []
+
 def should_rebuild_vectorstore(vector_store_path, data_path='./data'):
     """Check if vector store needs rebuilding based on file timestamps"""
     if not os.path.exists(vector_store_path):
@@ -53,8 +72,8 @@ def should_rebuild_vectorstore(vector_store_path, data_path='./data'):
     except:
         return True, "Tidak dapat membaca timestamp vector store"
 
-    # Check all markdown files
-    md_files = glob.glob(f'{data_path}/**/*.md', recursive=True)
+    # Use the get_data_directory function to find markdown files
+    data_dir, md_files = get_data_directory()
     if not md_files:
         return False, "Tidak ada file markdown ditemukan"
 
@@ -73,21 +92,40 @@ def load_and_process_documents(data_path='./data'):
     """Load and process all markdown documents"""
     print("📖 Memuat dokumen dari direktori 'data'...")
 
-    # Check if data directory exists
-    if not os.path.exists(data_path):
-        print(f"❌ Data directory tidak ditemukan: {data_path}")
-        print(f"   Current working directory: {os.getcwd()}")
-        print(f"   Directory contents: {os.listdir('.')}")
+    # Use robust data directory detection
+    data_dir, md_files = get_data_directory()
+
+    if not data_dir or not md_files:
+        print("❌ Tidak ada file markdown ditemukan!")
+        print(f"📍 Working directory: {os.getcwd()}")
+        print(f"📍 Vector store path: /app/chroma_db")
+        print(f"📍 Data directory exists: {os.path.exists('./data')}")
+
+        # List what's actually in the current directory
+        try:
+            current_contents = os.listdir('.')
+            print(f"📁 Current directory contents: {current_contents}")
+
+            if os.path.exists('./data'):
+                data_contents = os.listdir('./data')
+                print(f"📁 Data directory contents: {data_contents}")
+
+                # Check subdirectories
+                for item in data_contents:
+                    item_path = os.path.join('./data', item)
+                    if os.path.isdir(item_path):
+                        subdir_contents = os.listdir(item_path)
+                        print(f"📁 {item}/ contents: {subdir_contents}")
+            else:
+                print("📁 Data directory does not exist")
+
+        except Exception as e:
+            print(f"Error listing directory contents: {e}")
+
         return None
 
+    print(f"✅ Found {len(md_files)} markdown files in {data_dir}")
     all_docs = []
-    md_files = glob.glob(f'{data_path}/**/*.md', recursive=True)
-
-    if not md_files:
-        print(f"❌ Tidak ada file markdown ditemukan di direktori {data_path}/")
-        print(f"   Directory contents: {os.listdir(data_path) if os.path.exists(data_path) else 'Directory not found'}")
-        return None
-
     doc_counts = {}
 
     for file_path in md_files:

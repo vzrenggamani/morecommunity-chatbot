@@ -2,8 +2,10 @@ google-generativeai
 langchain-google-genai
 langchain
 langchain-community
-chromadb
+langchain-chroma
 unstructured
 markdown
 streamlit
 pysqlite3-binary
+tiktoken
+pandas

@@ -9,9 +9,7 @@ services:
     environment:
       - GOOGLE_API_KEY=${GOOGLE_API_KEY}
     volumes:
-      # Mount data directory to keep documents accessible
-      - ./data:/app/data:ro
-      # Persist ChromaDB data
+      # Persist ChromaDB data only
       - chroma_data:/app/chroma_db
     restart: unless-stopped
     healthcheck:

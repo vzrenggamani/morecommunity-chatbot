@@ -10,10 +10,13 @@ from datetime import datetime
 from langchain_community.document_loaders import UnstructuredMarkdownLoader
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_google_genai import GoogleGenerativeAIEmbeddings, ChatGoogleGenerativeAI
-from langchain_community.vectorstores import Chroma
+from langchain_chroma import Chroma
 from langchain.chains import RetrievalQA
 from langchain.prompts import PromptTemplate
-import glob #<-- Import glob
+import glob
+import tiktoken
+import json
+import pandas as pd
 
 # ... (keep your streamlit config and API key setup the same) ...
 
@@ -58,7 +61,89 @@ def should_rebuild_vectorstore(vector_store_path, data_path='./data'):
 
     return False, "Vector store masih up-to-date"
 
+def count_tokens(text, model_name="gpt-3.5-turbo"):
+    """Count tokens in text using tiktoken"""
+    try:
+        # Use a general tokenizer for Gemini models
+        encoding = tiktoken.get_encoding("cl100k_base")  # This is used by GPT-4 and similar models
+        tokens = encoding.encode(text)
+        return len(tokens)
+    except Exception as e:
+        # Fallback: rough estimation (1 token ≈ 4 characters for most languages)
+        return len(text) // 4
+
+def initialize_token_tracking():
+    """Initialize token usage tracking in session state"""
+    if "token_usage" not in st.session_state:
+        st.session_state.token_usage = {
+            "total_input_tokens": 0,
+            "total_output_tokens": 0,
+            "conversation_count": 0,
+            "session_history": []
+        }
+
+def add_token_usage(input_tokens, output_tokens, query_text, response_text):
+    """Add token usage to session tracking"""
+    if "token_usage" not in st.session_state:
+        initialize_token_tracking()
+
+    st.session_state.token_usage["total_input_tokens"] += input_tokens
+    st.session_state.token_usage["total_output_tokens"] += output_tokens
+    st.session_state.token_usage["conversation_count"] += 1
+
+    # Add to history (keep last 10 conversations)
+    conversation_entry = {
+        "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "input_tokens": input_tokens,
+        "output_tokens": output_tokens,
+        "query_preview": query_text[:50] + "..." if len(query_text) > 50 else query_text,
+        "response_preview": response_text[:50] + "..." if len(response_text) > 50 else response_text
+    }
+
+    st.session_state.token_usage["session_history"].append(conversation_entry)
+
+    # Keep only last 10 conversations
+    if len(st.session_state.token_usage["session_history"]) > 10:
+        st.session_state.token_usage["session_history"] = st.session_state.token_usage["session_history"][-10:]
+
+def format_token_info(input_tokens, output_tokens):
+    """Format token usage information for display"""
+    total_tokens = input_tokens + output_tokens
+
+    # Rough cost estimation (this varies by provider, adjust as needed)
+    # These are approximate costs for reference
+    estimated_cost_input = input_tokens * 0.000001  # $0.001 per 1K tokens (example)
+    estimated_cost_output = output_tokens * 0.000002  # $0.002 per 1K tokens (example)
+    total_estimated_cost = estimated_cost_input + estimated_cost_output
+
+    return f"""
+📊 **Token Usage:**
+- Input tokens: {input_tokens:,}
+- Output tokens: {output_tokens:,}
+- Total tokens: {total_tokens:,}
+- Estimated cost: ${total_estimated_cost:.6f} (approximate)
+"""
+
 @st.cache_resource
+def get_data_directory():
+    """Get the correct data directory path for different environments"""
+    # Try different possible data directory locations
+    possible_paths = [
+        './data',           # Local development
+        '/app/data',        # Docker container
+        'data',             # Alternative local
+        os.path.join(os.getcwd(), 'data')  # Absolute path from current working directory
+    ]
+
+    for path in possible_paths:
+        if os.path.exists(path):
+            # Check if it actually contains markdown files
+            md_files = glob.glob(f'{path}/**/*.md', recursive=True)
+            if md_files:
+                return path, md_files
+
+    return None, []
+
 def load_llm_and_retriever():
     """
     Loads components with persistent vector store to minimize cold starts.
@@ -91,8 +176,42 @@ def load_llm_and_retriever():
 
         # 1. Load Documents with type labeling
         st.info("📖 Memuat dokumen dari direktori 'data'...")
+
+        # Get the correct data directory
+        data_dir, md_files = get_data_directory()
+
+        if not data_dir or not md_files:
+            st.error("❌ Tidak ada file markdown ditemukan!")
+            st.info("🔍 **Debugging info:**")
+            st.info(f"📍 Working directory: {os.getcwd()}")
+            st.info(f"📍 Vector store path: {vector_store_path}")
+            st.info(f"📍 Data directory exists: {os.path.exists('./data')}")
+
+            # List what's actually in the current directory
+            try:
+                current_contents = os.listdir('.')
+                st.info(f"📁 Current directory contents: {current_contents}")
+
+                if os.path.exists('./data'):
+                    data_contents = os.listdir('./data')
+                    st.info(f"📁 Data directory contents: {data_contents}")
+
+                    # Check subdirectories
+                    for item in data_contents:
+                        item_path = os.path.join('./data', item)
+                        if os.path.isdir(item_path):
+                            subdir_contents = os.listdir(item_path)
+                            st.info(f"📁 {item}/ contents: {subdir_contents}")
+                else:
+                    st.info("📁 Data directory does not exist")
+
+            except Exception as e:
+                st.error(f"Error listing directory contents: {e}")
+
+            st.stop()
+
+        st.success(f"✅ Found {len(md_files)} markdown files in {data_dir}")
         all_docs = []
-        md_files = glob.glob('./data/**/*.md', recursive=True)
 
         for file_path in md_files:
             try:
@@ -246,6 +365,20 @@ def show_debug_page():
                         st.write(file_modified)
     else:
         st.warning("No markdown files found in data directory")
+        st.info("🔍 **Debugging info:**")
+        st.info(f"📍 Working directory: {os.getcwd()}")
+
+        # Check various possible data directory locations
+        possible_paths = ['./data', '/app/data', 'data']
+        for path in possible_paths:
+            exists = os.path.exists(path)
+            st.info(f"📁 {path} exists: {'✅' if exists else '❌'}")
+            if exists:
+                try:
+                    contents = os.listdir(path)
+                    st.info(f"📁 {path} contents: {contents}")
+                except Exception as e:
+                    st.info(f"📁 {path} error reading contents: {e}")
 
     # Vector Store Information
     st.header("🗄️ Vector Store Information")
@@ -402,6 +535,98 @@ def show_debug_page():
     if 'load_time' in st.session_state:
         st.metric("Last Load Time", f"{st.session_state.load_time:.2f} seconds")
 
+    # Token Usage Analytics
+    st.header("📊 Token Usage Analytics")
+
+    if st.session_state.get("token_usage"):
+        usage = st.session_state.token_usage
+
+        # Overall statistics
+        col1, col2, col3, col4 = st.columns(4)
+
+        with col1:
+            st.metric("Total Conversations", usage["conversation_count"])
+        with col2:
+            st.metric("Input Tokens", f"{usage['total_input_tokens']:,}")
+        with col3:
+            st.metric("Output Tokens", f"{usage['total_output_tokens']:,}")
+        with col4:
+            total_tokens = usage['total_input_tokens'] + usage['total_output_tokens']
+            st.metric("Total Tokens", f"{total_tokens:,}")
+
+        # Cost estimation
+        estimated_cost = (usage['total_input_tokens'] * 0.000001) + (usage['total_output_tokens'] * 0.000002)
+        st.metric("Estimated Session Cost", f"${estimated_cost:.6f}")
+
+        # Conversation history
+        if usage["session_history"]:
+            st.subheader("📝 Recent Conversation Token Usage")
+
+            # Create a table of recent conversations
+            history_data = []
+            for entry in reversed(usage["session_history"]):  # Show most recent first
+                history_data.append({
+                    "Time": entry["timestamp"],
+                    "Query Preview": entry["query_preview"],
+                    "Input Tokens": f"{entry['input_tokens']:,}",
+                    "Output Tokens": f"{entry['output_tokens']:,}",
+                    "Total": f"{entry['input_tokens'] + entry['output_tokens']:,}"
+                })
+
+            # Display as table
+            df = pd.DataFrame(history_data)
+            st.dataframe(df, use_container_width=True)
+
+            # Show token usage trend if we have multiple conversations
+            if len(usage["session_history"]) > 1:
+                st.subheader("📈 Token Usage Trend")
+
+                # Prepare data for chart
+                timestamps = [entry["timestamp"] for entry in usage["session_history"]]
+                input_tokens = [entry["input_tokens"] for entry in usage["session_history"]]
+                output_tokens = [entry["output_tokens"] for entry in usage["session_history"]]
+
+                chart_data = pd.DataFrame({
+                    "Conversation": range(1, len(timestamps) + 1),
+                    "Input Tokens": input_tokens,
+                    "Output Tokens": output_tokens
+                })
+
+                st.line_chart(chart_data.set_index("Conversation"))
+
+        # Additional token statistics
+        if usage["conversation_count"] > 0:
+            avg_input = usage['total_input_tokens'] / usage["conversation_count"]
+            avg_output = usage['total_output_tokens'] / usage["conversation_count"]
+
+            st.subheader("📊 Average Token Usage per Conversation")
+            col1, col2, col3 = st.columns(3)
+
+            with col1:
+                st.metric("Avg Input Tokens", f"{avg_input:.0f}")
+            with col2:
+                st.metric("Avg Output Tokens", f"{avg_output:.0f}")
+            with col3:
+                st.metric("Avg Total Tokens", f"{avg_input + avg_output:.0f}")
+
+        # Reset button for token tracking
+        if st.button("🔄 Reset Token Usage Statistics"):
+            st.session_state.token_usage = {
+                "total_input_tokens": 0,
+                "total_output_tokens": 0,
+                "conversation_count": 0,
+                "session_history": []
+            }
+            st.success("✅ Token usage statistics reset!")
+            st.rerun()
+    else:
+        st.info("💡 No token usage data available yet. Start a conversation in the Chat tab to see token analytics.")
+        st.write("**What you'll see here:**")
+        st.write("- Total tokens used (input/output)")
+        st.write("- Estimated costs")
+        st.write("- Per-conversation token breakdown")
+        st.write("- Token usage trends over time")
+
     # Actions
     st.header("🛠️ Actions")
 
@@ -426,13 +651,16 @@ def show_debug_page():
                     # Initialize embeddings
                     embeddings = GoogleGenerativeAIEmbeddings(model="models/text-embedding-004")
 
-                    # Load all documents
+                    # Load all documents using robust data directory detection
                     all_docs = []
-                    md_files = glob.glob('./data/**/*.md', recursive=True)
+                    data_dir, md_files = get_data_directory()
 
                     if not md_files:
                         st.error("❌ No markdown files found in data directory")
+                        st.info("🔍 Please check that your data files are properly mounted in the Docker container")
                         return
+
+                    st.info(f"📁 Using data directory: {data_dir}")
 
                     for file_path in md_files:
                         try:
@@ -555,12 +783,29 @@ def show_debug_page():
 
 def show_chat_page(qa_chain):
     """Display the main chat interface"""
+    # Initialize token tracking
+    initialize_token_tracking()
+
     # Add logo and title
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
         st.markdown("# 🏥 Rare Disease Helper Chatbot")
 
     st.markdown("---")
+
+    # Display token usage summary in sidebar
+    with st.sidebar:
+        if st.session_state.get("token_usage"):
+            st.markdown("### 📊 Token Usage (This Session)")
+            usage = st.session_state.token_usage
+            st.metric("Total Conversations", usage["conversation_count"])
+            st.metric("Total Input Tokens", f"{usage['total_input_tokens']:,}")
+            st.metric("Total Output Tokens", f"{usage['total_output_tokens']:,}")
+            st.metric("Total Tokens", f"{usage['total_input_tokens'] + usage['total_output_tokens']:,}")
+
+            # Rough cost estimation
+            total_cost = (usage['total_input_tokens'] * 0.000001) + (usage['total_output_tokens'] * 0.000002)
+            st.metric("Estimated Cost", f"${total_cost:.6f}")
 
     # Initialize chat history
     if "messages" not in st.session_state:
@@ -579,9 +824,48 @@ def show_chat_page(qa_chain):
         st.session_state.messages.append({"role": "user", "content": prompt})
 
         with st.spinner("Mencari jawaban terbaik untuk Anda..."):
+            # Calculate input tokens (context + prompt)
+            # First, get the context that will be sent to the LLM
+            retriever = qa_chain.retriever
+            relevant_docs = retriever.get_relevant_documents(prompt)
+            context_text = "\n\n".join([doc.page_content for doc in relevant_docs])
+
+            # Calculate tokens for the full prompt that will be sent to LLM
+            full_prompt_text = f"""
+            Anda adalah dokter AI yang ahli dalam bidang penyakit langka dan kesehatan. Anda memiliki akses ke berbagai jenis pengetahuan medis:
+
+            SUMBER PENGETAHUAN ANDA:
+            {context_text}
+
+            Ketika memberikan jawaban, sesuaikan pendekatan berdasarkan jenis informasi:
+            - Informasi medis/klinis: Gunakan dengan otoritas profesional dan presisi klinis
+            - Pengalaman pasien: Gunakan untuk memberikan empati dan pemahaman mendalam tentang pengalaman keluarga
+            - Sumber komunitas: Gunakan untuk memberikan dukungan dan informasi praktis tentang resources
+
+            PERTANYAAN PASIEN: {prompt}
+
+            PENTING - JANGAN LAKUKAN:
+            - JANGAN katakan "berdasarkan cerita Anda", "dari informasi yang Anda berikan"
+            - JANGAN asumsikan pasien telah menceritakan detail yang ada di pengetahuan Anda
+            - JANGAN rujuk ke sumber atau dokumen secara eksplisit
+
+            LAKUKAN:
+            - Jawab langsung dan profesional seperti dokter berpengalaman
+            - Integrasikan semua jenis pengetahuan secara natural
+            - Berikan empati berdasarkan pengalaman keluarga yang Anda ketahui
+            - Sertakan informasi praktis dan dukungan komunitas jika relevan
+            - Selalu sarankan konsultasi medis profesional untuk diagnosis dan pengobatan
+
+            JAWABAN DOKTER:"""
+
+            input_tokens = count_tokens(full_prompt_text)
+
             # Get the response from the RAG chain
             response = qa_chain.invoke(prompt)
             answer = response['result']
+
+            # Calculate output tokens
+            output_tokens = count_tokens(answer)
 
             # Display sources with document types for transparency
             sources = response['source_documents']
@@ -608,7 +892,14 @@ def show_chat_page(qa_chain):
             for source_name, source_type in sorted(unique_sources.items()):
                 source_list += f"- {source_type}: {source_name}\n"
 
-            full_response = answer + source_list
+            # Add token usage information
+            token_info = format_token_info(input_tokens, output_tokens)
+
+            # Create full response with token info
+            full_response = answer + source_list + token_info
+
+            # Track token usage
+            add_token_usage(input_tokens, output_tokens, prompt, answer)
 
         # Display assistant response in chat message container
         with st.chat_message("assistant"):

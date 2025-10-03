@@ -12,8 +12,11 @@ RUN apt-get update && apt-get install -y \
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy app
-COPY . .
+# Copy data directory first (so it's always available)
+COPY data/ ./data/
+
+# Copy app files
+COPY app.py build_vector_store.py test_vector_store.py start.sh start.bat ./
 
 # Create directories
 RUN mkdir -p chroma_db logs
