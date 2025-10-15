@@ -1,0 +1,21 @@
+services:
+  raredisease-chatbot:
+    image: ghcr.io/vzrenggamani/raredisease-chatbot:latest
+    container_name: raredisease-chatbot
+    ports:
+      - "8501:8501"
+    environment:
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY}
+    volumes:
+      # Persist ChromaDB data only
+      - chroma_data:/app/chroma_db
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8501/_stcore/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+volumes:
+  chroma_data:
