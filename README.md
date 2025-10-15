@@ -1,50 +1,47 @@
-# 🏥 Rare Disease Helper Chatbot
+# Rare Disease Chatbot
 
-A simple AI chatbot to help with rare disease information using Google Gemini and RAG (Retrieval-Augmented Generation).
+## How to Deploy
 
-## 🚀 Quick Start
+1. Have a docker
+2. Put your API keys in the `.env` file.
+3. Run the following command in your terminal:
 
-### 1. Install Requirements
-```bash
-pip install -r requirements.txt
-```
+    ```bash
+    docker-compose up -d --build
+    ```
 
-### 2. Add Your API Key
-Create a `.env` file:
-```
-GOOGLE_API_KEY=your_google_api_key_here
-```
+4. Open your browser and go to `http://localhost:8501`
 
-### 3. Run the App
-```bash
-# Windows
-start.bat
+5. Enjoy!
 
-# Linux/Mac
-chmod +x start.sh && ./start.sh
-```
+## Directory
 
-### 4. Open Browser
-Go to: **http://localhost:8501**
+- `data/`: Your knowledge source for RAG.
+- `logs/`: Logs for the application. Dont bother about it.
 
-## 🐳 Docker (Optional)
-```bash
-docker-compose -f docker-compose.simple.yml up
-```
+## Important Notes
 
-## 📁 Add Your Documents
-Put your markdown documents in the `data/` folder:
-```
-data/
-├── medical_reference/
-├── user_stories/
-└── community_resources/
-```
+1. Make sure to replace the placeholder values in the `.env` file with your actual API keys.
+2. The first time you run the application, it may take some time to download the necessary models and dependencies.
+3. If you encounter any issues, check the logs in the `logs/` directory for more information.
+4. To stop the application, run:
 
-## 📋 Features
-- Chat with AI about rare diseases
-- Document-based knowledge retrieval
-- Empathetic responses based on real experiences
-- Auto-builds knowledge base from your documents
+    ```bash
+    docker-compose down
+    ```
 
-That's it! 🎉
+5. To rebuild the application after making changes, run:
+
+    ```bash
+    docker-compose up -d --build
+    ```
+
+6. Ensure that your `data/` directory contains the necessary documents for the chatbot to function effectively.
+
+## License and Credits
+
+Licensed under [GNU GPLv3](LICENSE).
+
+This works done as part of research in [Universitas Negeri Malang](https://www.um.ac.id/).
+
+Contents on `data/` are licensed under [CC BY-NC 4.0](https://creativecommons.org/licenses/by-nc/4.0/).

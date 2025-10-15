@@ -119,19 +119,19 @@ def format_token_info(input_tokens, output_tokens, context_text, num_retrieved_d
 
     token_info = f"""
 
-**📊 Token Usage:**
-- Input: {input_tokens:,} tokens
-- Output: {output_tokens:,} tokens
-- Total: {total_tokens:,} tokens
-- Context: {context_tokens:,} tokens (from {num_retrieved_docs} docs)
-- Estimated cost: ${total_cost:.6f}
+    **📊 Token Usage:**
+    - Input: {input_tokens:,} tokens
+    - Output: {output_tokens:,} tokens
+    - Total: {total_tokens:,} tokens
+    - Context: {context_tokens:,} tokens (from {num_retrieved_docs} docs)
+    - Estimated cost: ${total_cost:.6f}
 
-**📈 Session Stats:**
-- Total conversations: {st.session_state.token_usage['conversation_count']}
-- Total input tokens: {st.session_state.token_usage['total_input_tokens']:,}
-- Total output tokens: {st.session_state.token_usage['total_output_tokens']:,}
-- Session cost: ${(st.session_state.token_usage['total_input_tokens'] * 0.00025 + st.session_state.token_usage['total_output_tokens'] * 0.0005) / 1000:.6f}
-"""
+    **📈 Session Stats:**
+    - Total conversations: {st.session_state.token_usage['conversation_count']}
+    - Total input tokens: {st.session_state.token_usage['total_input_tokens']:,}
+    - Total output tokens: {st.session_state.token_usage['total_output_tokens']:,}
+    - Session cost: ${(st.session_state.token_usage['total_input_tokens'] * 0.00025 + st.session_state.token_usage['total_output_tokens'] * 0.0005) / 1000:.6f}
+    """
     return token_info
 
 def get_optimized_context(relevant_docs, max_tokens=500):
@@ -179,12 +179,13 @@ def get_optimized_context(relevant_docs, max_tokens=500):
         context_info = f"\n- Context: {context_tokens:,} tokens ({num_docs} docs)"
 
     return f"""
-📊 **Token Usage:**
-- Input tokens: {input_tokens:,}{context_info}
-- Output tokens: {output_tokens:,}
-- Total tokens: {total_tokens:,}
-- Estimated cost: ${total_estimated_cost:.6f} (approximate)
-"""@st.cache_resource
+    📊 **Token Usage:**
+    - Input tokens: {input_tokens:,}{context_info}
+    - Output tokens: {output_tokens:,}
+    - Total tokens: {total_tokens:,}
+    - Estimated cost: ${total_estimated_cost:.6f} (approximate)
+    """@st.cache_resource
+
 def get_data_directory():
     """Get the correct data directory path for different environments"""
     # Try different possible data directory locations
