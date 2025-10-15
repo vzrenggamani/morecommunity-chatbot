@@ -17,7 +17,7 @@ def load_llm_and_retriever():
     """
 
     # Initialize embeddings
-    embeddings = GoogleGenerativeAIEmbeddings(model="models/text-embedding-004")
+    embeddings = GoogleGenerativeAIEmbeddings(model="models/gemini-embedding-001")
 
     # Smart caching: Check if vector store needs rebuilding
     vector_store_path = "chroma_db"
