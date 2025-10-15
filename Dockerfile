@@ -15,6 +15,12 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy data directory first (so it's always available)
 COPY data/ ./data/
 
+# Copy pages directory
+COPY pages/ ./pages/
+
+# Copy utils directory
+COPY utils/ ./utils/
+
 # Copy app files
 COPY app.py build_vector_store.py test_vector_store.py start.sh start.bat ./
 
