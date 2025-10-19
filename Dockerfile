@@ -22,7 +22,7 @@ COPY pages/ ./pages/
 COPY utils/ ./utils/
 
 # Copy app files
-COPY app.py build_vector_store.py test_vector_store.py start.sh start.bat ./
+COPY app.py build_vector_store.py test_vector_store.py start.sh ./
 
 # Create directories
 RUN mkdir -p chroma_db logs
