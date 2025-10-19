@@ -7,7 +7,7 @@
 3. Run the following command in your terminal:
 
     ```bash
-    docker-compose up -d --build
+    docker-compose -f docker-compose.prod.yml up -d
     ```
 
 4. Open your browser and go to `http://localhost:8501`
@@ -37,6 +37,26 @@
     ```
 
 6. Ensure that your `data/` directory contains the necessary documents for the chatbot to function effectively.
+
+## Push to Github Container Registry
+
+1. Build the Docker image:
+
+    ```bash
+    docker build -t ghcr.io/your-username/rare-disease-chatbot:latest .
+    ```
+
+2. Login to GitHub Container Registry:
+
+    ```bash
+    echo $GITHUB_TOKEN | docker login ghcr.io -u your-username --password-stdin
+    ```
+
+3. Push the Docker image:
+
+    ```bash
+    docker push ghcr.io/your-username/rare-disease-chatbot:latest
+    ```
 
 ## License and Credits
 
