@@ -8,9 +8,15 @@ from langchain_community.document_loaders import UnstructuredMarkdownLoader
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from .document_utils import determine_document_type, get_data_directory
 from .vectorstore_utils import should_rebuild_vectorstore
+from langchain.callbacks.base import BaseCallbackHandler
 
 
 @st.cache_resource
+class GoogleUsageLogger(BaseCallbackHandler):
+    def on_llm_end(self, response, **kwargs):
+        print("LLM Usage Metadata:", response.response_metadata)
+
+
 def load_llm_and_retriever():
     """
     Loads components with persistent vector store to minimize cold starts.
@@ -197,3 +203,15 @@ def _show_debug_info():
 
     except Exception as e:
         st.error(f"Error listing directory contents: {e}")
+
+
+def get_llm_instance():
+    """
+    Get a standalone LLM instance for direct testing (not cached).
+    This is used for raw response inspection.
+    """
+    return ChatGoogleGenerativeAI(
+        model="gemini-2.0-flash-lite",
+        temperature=0.7,
+        max_output_tokens=1024,
+    )
