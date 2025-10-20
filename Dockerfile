@@ -33,8 +33,8 @@ EXPOSE 8501
 # Health check
 HEALTHCHECK CMD curl --fail http://localhost:8501/_stcore/health
 
-# Make startup script executable
-RUN chmod +x /app/start.sh
+# Fix line endings and make startup script executable
+RUN sed -i 's/\r$//' /app/start.sh && chmod +x /app/start.sh
 
 # Run startup script
 CMD ["/app/start.sh"]
