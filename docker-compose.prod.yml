@@ -1,6 +1,6 @@
 services:
   raredisease-chatbot:
-    image: ghcr.io/vzrenggamani/raredisease-chatbot:latest
+    image: registry.gitlab.com/teknologi-pendidikan/morecommunity-chatbot:latest
     container_name: raredisease-chatbot
     ports:
       - "8501:8501"
